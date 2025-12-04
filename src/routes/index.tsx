@@ -1,13 +1,18 @@
+import { ActionButton } from '@/components/ui/action-button'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { db } from '@/db'
+import { todos } from '@/db/schema'
 import { cn } from '@/lib/utils'
-import { createFileRoute, Link } from '@tanstack/react-router'
-import { createServerFn } from '@tanstack/react-start'
+import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
+import { createServerFn, useServerFn } from '@tanstack/react-start'
+import { eq } from 'drizzle-orm'
 import { EditIcon, ListTodoIcon, PlusIcon, Trash2Icon } from 'lucide-react'
+import { startTransition, useState } from 'react'
+import z from 'zod'
 
 const serverLoader = createServerFn({ method: "GET" }).handler(() => {
   return db.query.todos.findMany()
@@ -104,6 +109,29 @@ function TodoListTable({
   )
 }
 
+const deleteFn = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ id: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    await db.delete(todos).where(eq(todos.id, data.id))
+
+    return { error: false }
+  })
+
+const toggleFn = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      id: z.string().min(1),
+      isComplete: z.boolean()
+    })
+  )
+  .handler(async ({ data }) => {
+    await new Promise((res) => setTimeout(res, 1000))
+    await db
+      .update(todos)
+      .set({ isComplete: data.isComplete })
+      .where(eq(todos.id, data.id))
+  })
+
 
 function TodoTableRow({
   createdAt,
@@ -116,10 +144,24 @@ function TodoTableRow({
   isComplete: boolean
   createdAt: Date
 }) {
+  const deleteFnServer = useServerFn(deleteFn)
+  const toggleFnServer = useServerFn(toggleFn)
+  const [isCurrentComplete, setIsCurrentComplete] = useState(isComplete)
+  const router = useRouter()
+
   return (
-    <TableRow>
+    <TableRow onClick={(e) => {
+      const target = e.target as HTMLElement
+      if (target.closest("[data-actions]")) return
+
+      setIsCurrentComplete(c => !c)
+      startTransition(async () => {
+        await toggleFnServer({ data: { id, isComplete: !isCurrentComplete } })
+        router.invalidate()
+      })
+    }}>
       <TableCell>
-        <Checkbox checked={isComplete} />
+        <Checkbox checked={isCurrentComplete} />
       </TableCell>
       <TableCell
         className={cn(
@@ -132,16 +174,24 @@ function TodoTableRow({
       <TableCell className='text-sm text-muted-foreground'>
         {formatDate(createdAt)}
       </TableCell>
-      <TableCell>
+      <TableCell data-actions>
         <div className='flex items-center justify-end gap-1'>
           <Button variant="ghost" size="icon-sm" asChild>
             <Link to="/todos/$id/edit" params={{ id }}>
               <EditIcon />
             </Link>
           </Button>
-          <Button variant="destructiveGhost" size="icon-sm">
+          <ActionButton
+            action={async () => {
+              const res = await deleteFnServer({ data: { id } })
+              router.invalidate()
+              return res
+            }}
+            variant="destructiveGhost"
+            size="icon-sm"
+          >
             <Trash2Icon />
-          </Button>
+          </ActionButton>
         </div>
       </TableCell>
     </TableRow>
