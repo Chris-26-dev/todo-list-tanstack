@@ -1,3 +1,4 @@
+import { LocalCountButton } from '@/components/local-count-button'
 import { ActionButton } from '@/components/ui/action-button'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -42,7 +43,8 @@ function App() {
             </Badge>
           )}
         </div>
-        <div>
+        <div className='flex gap-2'>
+          <LocalCountButton />
           <Button size="sm" asChild>
             <Link to="/todos/new">
               <PlusIcon />Add Todo
@@ -166,7 +168,7 @@ function TodoTableRow({
       <TableCell
         className={cn(
           'font-medium',
-          isComplete && 'text-muted-foreground line-through',
+          isCurrentComplete && 'text-muted-foreground line-through',
         )}
       >
         {name}
